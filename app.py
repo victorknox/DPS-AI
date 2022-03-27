@@ -22,7 +22,7 @@ def take_inp():
         </form>
         '''
 
-# reading input data
+# loading the dataset
 file_path = "./monatszahlen2112_verkehrsunfaelle.csv"
 df = pd.read_csv(file_path, sep=",", decimal=",")
 
@@ -50,8 +50,19 @@ accidents["Category"] = le.fit_transform(accidents["Category"])
 accidents["Accident_Type"] = le.fit_transform(accidents["Accident_Type"])
 X_scaled = X_scaler.fit_transform(accidents[['Category', 'Accident_Type', 'Month']])
 Y_scaled = Y_scaler.fit_transform(accidents[['Value']])
-data_val = X_scaled[:12]
-val_rescaled = data_val.reshape(1, data_val.shape[0], data_val.shape[1])
+
+# load the lstm model
+lstm_model = tf.keras.models.load_model('./lstm_model')
+
+def predict_fun(data):
+
+    data_pred = X_scaled[data.index]
+    pred_rescaled = data_pred.reshape(1, data_pred.shape[0], data_pred.shape[1])
+    pred_val = lstm_model.predict(pred_rescaled)
+    pred_val_Inverse = Y_scaler.inverse_transform(pred_val)
+
+    return pred_val_Inverse[0][0]
+
 
 @app.get('/')
 def basic_view():
@@ -59,13 +70,16 @@ def basic_view():
 
 @app.post('/predict')
 def predict(Year: str, Month: str  = Form(...)):
-    # load the lstm model
-    lstm_model = tf.keras.models.load_model('./lstm_model')
-    pred = lstm_model.predict(val_rescaled)
-    pred_Inverse = Y_scaler.inverse_transform(pred)
+    month = Year + Month
+    select_data = accidents[accidents["Month"] >= str(int(month) - 100) ]
+    select_data = select_data[select_data["Month"] < month]
+
+    predictions = []
+    for i in range(6):
+        predictions.append(int(predict_fun(select_data[i*12 : (i+1)*12])))
 
     return {
-        "prediction": int(pred_Inverse[0][0]),
+        "prediction": sum(predictions),
     }
 
 
